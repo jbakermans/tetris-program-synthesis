@@ -8,6 +8,7 @@ Created on Tue Aug  9 16:19:00 2022
 
 import dsl
 import matplotlib.pyplot as plt
+import random
 
 # Define all primitive shapes
 primitives = dsl.PRIMITIVES
@@ -56,3 +57,18 @@ for i, s in enumerate([x4, x5, x6]):
     ax.set_yticks([])    
     # Plot shape
     ax.imshow(s, cmap='Greys', vmin=0, vmax=1)
+    
+# Get all possible two-object combinations, and plot a random sample
+all_shapes = dsl.generate()
+plot_shapes = random.sample([s for s in all_shapes if s[1] is not None], 25)
+plt.figure()
+for i, s in enumerate(plot_shapes):
+    # Create subplot
+    ax = plt.subplot(5, 5, i + 1)
+    # Remove ticks
+    ax.set_xticks([])
+    ax.set_yticks([])    
+    # Plot shape
+    if s[1] is not None: ax.imshow(s[1], cmap='Greys', vmin=0, vmax=1)
+    # Set title
+    ax.set_title(s[0])

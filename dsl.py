@@ -80,3 +80,22 @@ def do_overlap(shapes, positions):
     combined_area = np.sum(combine(shapes, positions))
     # There is overlap if the separate area is larger than the combined area
     return combined_area < separate_area
+
+# Create 'generative model' that enumerates all possible two-shape combinations
+def generate(primitives=PRIMITIVES):
+    # Build a long list of function-shape pairs
+    all_shapes = []
+    # First add primitives to list
+    for i, s in enumerate(primitives):
+        all_shapes.append(['s:' + str(i), s])
+    # Then add all pairs of primitives
+    for i1, s1 in enumerate(primitives):
+        for i2, s2 in enumerate(primitives):
+            for nf, f in enumerate([hor, vert]):
+                for shift in range(-2, 3):
+                    all_shapes.append([
+                        'f:' + str(nf) + '_s1:' + str(i1) + '_s2:' + str(i2) + '_v:' + str(shift),
+                        f(s1, s2, shift=shift)])
+            print('Finished object pair (' + str(i1) + ', ' + str(i2) + ')')
+    return all_shapes
+    
