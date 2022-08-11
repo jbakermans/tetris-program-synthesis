@@ -7,6 +7,8 @@ Created on Tue Aug  9 10:07:21 2022
 """
 
 import numpy as np
+from lark import Lark
+import turtle
 
 # Create primitives as global
 PRIMITIVES = (
@@ -21,7 +23,33 @@ PRIMITIVES = (
     np.array([[1,1,1]])
     )
 
-# Define horizontal concatenation function
+# Define language grammar in lark (https://www.lark-parser.org/ide/)
+GRAMMAR = """
+start: program | shape
+shape: S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9
+program: shape | horizontal | vertical
+
+S0: "s0"
+S1: "s1"
+S2: "s2"
+S3: "s3"
+S4: "s4"
+S5: "s5"
+S6: "s6"
+S7: "s7"
+S8: "s8"
+S9: "s9"
+
+horizontal: "hor(" program "," program ";" SIGNED_INT ")"
+vertical: "vert(" program "," program ";" SIGNED_INT ")"
+
+%import common.SIGNED_INT
+"""
+
+# Parse syntax
+PARSER = Lark(GRAMMAR)
+
+# Concatenate two objects horizontally
 def hor(a, b, shift=0):
     # If the shift is so big that b will miss to a: break immediately
     if shift <= -b.shape[0] or shift >= a.shape[0]:
@@ -37,7 +65,7 @@ def hor(a, b, shift=0):
     # Return shape that combines the two
     return combine([a, b], [pos_a, pos_b])
 
-# Define horizontal concatenation function
+# Concatenate two objects vertically
 def vert(a, b, shift=0):
     # If the shift is so big that b will miss a: break immediately
     if shift <= -b.shape[1] or shift >= a.shape[1]:
@@ -99,3 +127,29 @@ def generate(primitives=PRIMITIVES):
             print('Finished object pair (' + str(i1) + ', ' + str(i2) + ')')
     return all_shapes
     
+# Take program sentence, parse to tree according to grammar, and execute
+def run_program(program):
+    parse_tree = PARSER.parse(program)
+    return run_node(parse_tree.children[0])
+    
+# Specify what to do at each node of the parse tree
+def run_node(t):
+    # If this is a shape: return primitive for that shape
+    if t.data == 'shape':
+        # Return primitive shape found in child node
+        return PRIMITIVES[int(t.children[0].value[-1])]
+    # If this is vertical function: call vertical function with children as input
+    elif t.data == 'vertical': 
+        # Return vertical concatenation; final child node is shift argument
+        return vert(run_node(t.children[0]), 
+                    run_node(t.children[1]), 
+                    shift=int(t.children[2].value))
+    # If this is horizontal function: call vertical function with children as input
+    elif t.data == 'horizontal': 
+        # Return vertcial concatenation; final child node is shift argument
+        return hor(run_node(t.children[0]), 
+                   run_node(t.children[1]), 
+                   shift=int(t.children[2].value))
+    # In all other cases (like start or program nodes), simply continue down
+    else:
+        return run_node(t.children[0])

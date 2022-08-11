@@ -72,3 +72,32 @@ for i, s in enumerate(plot_shapes):
     if s[1] is not None: ax.imshow(s[1], cmap='Greys', vmin=0, vmax=1)
     # Set title
     ax.set_title(s[0])
+    
+# Create a few programs, parse them, and run the tree
+p1 = 'hor(s2,s3;0)'
+p2 = 'vert(s0,s8;0)'
+p3 = 'vert(hor(s2,s3;0),vert(s0,s8;0);2)'
+plt.figure()
+# First row: primitive shapes
+for i, p in enumerate(['s' + str(i) for i in range(9)]):
+    # Create subplot
+    ax = plt.subplot(2, len(primitives), i + 1)
+    # Remove ticks
+    ax.set_xticks([])
+    ax.set_yticks([])    
+    # Plot shape
+    ax.imshow(dsl.run_program(p), cmap='Greys', vmin=0, vmax=1)
+    # Set title to program
+    ax.set_title(p)
+# Second row: combined shapes
+for i, p in enumerate([p1, p2, p3]):
+    # Create subplot
+    ax = plt.subplot(2, 3, 3 + i + 1)
+    # Remove ticks
+    ax.set_xticks([])
+    ax.set_yticks([])    
+    # Plot shape
+    ax.imshow(dsl.run_program(p), cmap='Greys', vmin=0, vmax=1)
+    # Set title to program
+    ax.set_title(p)
+
