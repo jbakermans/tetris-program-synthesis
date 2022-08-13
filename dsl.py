@@ -8,7 +8,6 @@ Created on Tue Aug  9 10:07:21 2022
 
 import numpy as np
 from lark import Lark
-import turtle
 
 # Create primitives as global
 PRIMITIVES = (
@@ -52,7 +51,7 @@ PARSER = Lark(GRAMMAR)
 # Concatenate two objects horizontally
 def hor(a, b, shift=0):
     # If the shift is so big that b will miss to a: break immediately
-    if shift <= -b.shape[0] or shift >= a.shape[0]:
+    if a is None or b is None or shift <= -b.shape[0] or shift >= a.shape[0]:
         return None
     # Place object a at origin
     pos_a = [0, 0]
@@ -68,7 +67,7 @@ def hor(a, b, shift=0):
 # Concatenate two objects vertically
 def vert(a, b, shift=0):
     # If the shift is so big that b will miss a: break immediately
-    if shift <= -b.shape[1] or shift >= a.shape[1]:
+    if a is None or b is None or shift <= -b.shape[1] or shift >= a.shape[1]:
         return None
     # Place object a at origin
     pos_a = [0, 0]
@@ -146,7 +145,7 @@ def run_node(t):
                     shift=int(t.children[2].value))
     # If this is horizontal function: call vertical function with children as input
     elif t.data == 'horizontal': 
-        # Return vertcial concatenation; final child node is shift argument
+        # Return horizontal concatenation; final child node is shift argument
         return hor(run_node(t.children[0]), 
                    run_node(t.children[1]), 
                    shift=int(t.children[2].value))
