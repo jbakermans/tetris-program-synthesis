@@ -51,13 +51,18 @@ class Tetris(Program):
     def IoU(self, other):
         # Calculate 'area under curve' between self and other object
         if isinstance(other, Tetris): other = other.execute()
-        # Find maximum overlap between self and other through 2d convolution
-        overlap = np.max(np.convolve2d(self.execute(), other))
-        # Find maximum overshoot from number of pixels in self more than other
-        overshoot = max([0, np.sum(self.execute()) - np.sum(other)])
-        # Find the match between self and other. Note this isn't symmetric:
-        # being smaller than other is OK, but being larger is punished
-        return (overlap - overshoot) / (overlap + overshoot)
+        # Pad other by own size so they can be convolved
+        other = np.pad(other,[[other.shape[0], other.shape[0]],
+                              [other.shape[1], other.shape[1]]])
+        # Make list of shapes; mirror other for convolution
+        shapes = [self.execute(), np.flipud(np.fliplr(other))]
+        # Find number of pixels in both self AND other for all shifts
+        both = convolve2d(shapes[0], shapes[1])
+        # Find number of pixels in either self OR (= 1-AND) other for all shifts
+        either = max([np.prod(s.shape) for s in shapes]) \
+            - convolve2d(1 - shapes[0], 1 - shapes[1], fillvalue=1)
+        # Return the maximum ratio of both over either pixels
+        return np.max(both[either>0] / either[either>0])
     
     def render(self):
         # Render function will depend on operation; return None by default
@@ -182,6 +187,20 @@ class Vert(Tetris):
     
 tDSL = DSL([Hor, Vert, Primitive],
           lexicon=Tetris.lexicon)
+
+"""Small utility function"""
+def padToFit(dat, val=0, w=RESOLUTION, h=RESOLUTION):
+    # Pad input array with zeros to achieve input shape
+    h_add = max([h - dat.shape[0], 0])
+    h_add_0 = int(h_add / 2)
+    h_add_1 = h_add - h_add_0
+    w_add = max([w - dat.shape[1], 0])
+    w_add_0 = int(w_add / 2)
+    w_add_1 = w_add - w_add_0
+    # The resulting padded array has the input roughly in its center
+    return np.pad(dat, [[h_add_0, h_add_1],[w_add_0, w_add_1]], 
+                  mode='constant', constant_values=val)
+    
 
 """Neural networks"""
 class ObjectEncoder(CNN):
@@ -363,7 +382,7 @@ if __name__ == "__main__":
             
 
     if arguments.mode == "train":
-        m = ProgramPointerNetwork(ObjectEncoder(), SpecEncoder(), dsl,
+        m = ProgramPointerNetwork(ObjectEncoder(), SpecEncoder(), tDSL,
                                   oneParent=arguments.oneParent,
                                   attentionRounds=arguments.attention,
                                   heads=arguments.heads,
