@@ -31,8 +31,8 @@ import torch
 import torch.nn as nn
 
 class Tetris(Program):
-    lexicon = ['hor', 'vert'] \
-        + ['s' + str(i) for i in range(9)] \
+    lexicon = ['h', 'v'] \
+        + [str(i) for i in range(9)] \
             + [i - int(RESOLUTION / 2) for i in range(RESOLUTION)]
 
     def __init__(self):
@@ -44,8 +44,8 @@ class Tetris(Program):
     def __ne__(self, o): return not (self == o)
 
     def execute(self):
-        # Only render if this has not been rendered before
-        if self._rendering is None: self._rendering = self.render()
+        # Only render if this has not been rendered before. Pad to RESOLUTION
+        if self._rendering is None: self._rendering = padToFit(self.render())
         return self._rendering
 
     def IoU(self, other):
@@ -72,19 +72,19 @@ class Tetris(Program):
 tTetris = BaseType(Tetris)
 
 class Primitive(Tetris):
-    token = 's'    
+    token = 's' # Will be replaced by primitive nr on init
     type = arrow(tTetris, tTetris)
     
     def __init__(self, index=0):
         super().__init__()        
         self.shape = dsl.PRIMITIVES[index]
         self.index = index
-        self.token += str(index)
+        self.token = str(index)
         
     def toTrace(self): return [self]
 
     def __str__(self):
-        return self.token
+        return 's' + self.token
 
     def children(self): return []
 
@@ -99,13 +99,13 @@ class Primitive(Tetris):
         return p == self
 
     def serialize(self):
-        return self.token
+        return (self.token)
     
     def render(self):
         return self.shape
     
 class Hor(Tetris):
-    token = 'hor'
+    token = 'h'
     type = arrow(integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)), 
                  tTetris, tTetris, tTetris)
     
@@ -123,7 +123,7 @@ class Hor(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return ('hor',list(self.elements)[0],list(self.elements)[1], self.shift)
+        return (self.token,list(self.elements)[0],list(self.elements)[1], self.shift)
 
     def __eq__(self, o):
         return isinstance(o, Hor) and tuple(o.elements) == tuple(self.elements) \
@@ -146,7 +146,7 @@ class Hor(Tetris):
     
     
 class Vert(Tetris):
-    token = 'vert'
+    token = 'v'
     type = arrow(integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)), 
                  tTetris, tTetris, tTetris)
     
@@ -164,7 +164,7 @@ class Vert(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return ('vert',list(self.elements)[0],list(self.elements)[1], self.shift)
+        return (self.token,list(self.elements)[0],list(self.elements)[1], self.shift)
 
     def __eq__(self, o):
         return isinstance(o, Vert) and tuple(o.elements) == tuple(self.elements) \
@@ -189,13 +189,13 @@ tDSL = DSL([Hor, Vert, Primitive],
           lexicon=Tetris.lexicon)
 
 """Small utility function"""
-def padToFit(dat, val=0, w=RESOLUTION, h=RESOLUTION):
+def padToFit(dat, val=0, w=RESOLUTION, h=RESOLUTION, center=True):
     # Pad input array with zeros to achieve input shape
     h_add = max([h - dat.shape[0], 0])
-    h_add_0 = int(h_add / 2)
+    h_add_0 = int(h_add / 2) if center else h_add
     h_add_1 = h_add - h_add_0
     w_add = max([w - dat.shape[1], 0])
-    w_add_0 = int(w_add / 2)
+    w_add_0 = int(w_add / 2) if center else w_add
     w_add_1 = w_add - w_add_0
     # The resulting padded array has the input roughly in its center
     return np.pad(dat, [[h_add_0, h_add_1],[w_add_0, w_add_1]], 
@@ -210,6 +210,7 @@ class ObjectEncoder(CNN):
 
     def forward(self, spec, obj):
         if isinstance(obj, list): # batched - expect a single spec and multiple objects
+            # spec and object 
             spec = np.repeat(spec[np.newaxis,:,:],len(obj),axis=0)
             obj = np.stack(obj)
             return super(ObjectEncoder, self).forward(np.stack([spec, obj],1))
@@ -224,7 +225,7 @@ class SpecEncoder(CNN):
 
 
 """Training"""
-def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=False):
+def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=True):
     # Choose number of shapes to include
     desiredShapes = np.random.randint(minShapes, maxShapes + 1)
     # Generate initial shape
@@ -239,8 +240,8 @@ def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=
         # Shuffle objects randomly, so which goes where is random
         np.random.shuffle(o)
         # Get shapes of rendered version of both, because that will constrain shift
-        d = [i.execute().shape for i in o]        
-        # Randomly choose to      
+        d = [i.render().shape for i in o]        
+        # Randomly choosse to      
         if np.random.rand() > 0.5:
             # Horizontal concetanation, with random shift depending on heights
             s = Hor(o[0], o[1], shift=np.random.randint(-d[1][0] + 1, d[0][0]))
@@ -263,7 +264,6 @@ def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=
         plt.yticks([])        
         plt.title(s)        
         plt.savefig(export)
-        plt.show()        
     return s
 
 def trainCSG(m, getProgram, trainTime=None, checkpoint=None):
@@ -303,7 +303,7 @@ def testCSG(m, getProgram, timeout, export):
 
     testResults = [[] for _ in solvers]
 
-    for _ in range(30):
+    for _ in range(10):
         spec = getProgram()
         print("Trying to explain the program:")
         print(ProgramGraph.fromRoot(spec, oneParent=oneParent).prettyPrint())
@@ -349,16 +349,54 @@ def plotTestResults(testResults, timeout, defaultLoss=None,
         plot.show()
         
         
-    
+def debug(mode='demo'):
+    import argparse
+    parser = argparse.ArgumentParser(description = "")
+    parser.add_argument("--checkpoint", default="checkpoints/tetris_test.pickle")
+    parser.add_argument("--maxShapes", default=4,
+                            type=int)
+    parser.add_argument("--trainTime", default=None, type=float,
+                        help="Time in hours to train the network")
+    parser.add_argument("--attention", default=1, type=int,
+                        help="Number of rounds of self attention to perform upon objects in scope")
+    parser.add_argument("--heads", default=2, type=int,
+                        help="Number of attention heads")
+    parser.add_argument("--hidden", "-H", type=int, default=256,
+                        help="Size of hidden layers")
+    parser.add_argument("--timeout", default=5, type=float,
+                        help="Test time maximum timeout")
+    parser.add_argument("--oneParent", default=False, action='store_true')
+    arguments = parser.parse_args()    
         
-    
+    if mode == "demo":
+        for n in range(20):
+            randomScene(export=f"tmp/tetris_{n}.png",maxShapes=arguments.maxShapes)
+        import sys
+        sys.exit(0)
+    if mode == "train":
+        m = ProgramPointerNetwork(ObjectEncoder(), SpecEncoder(), tDSL,
+                                  oneParent=arguments.oneParent,
+                                  attentionRounds=arguments.attention,
+                                  heads=arguments.heads,
+                                  H=arguments.hidden)
+        trainCSG(m, lambda: randomScene(maxShapes=arguments.maxShapes),
+                 trainTime=arguments.trainTime*60*60 if arguments.trainTime else None,
+                 checkpoint=arguments.checkpoint)
+    elif mode == "test":
+        with open(arguments.checkpoint,"rb") as handle:
+            m = pickle.load(handle)
+        testCSG(m,
+                lambda: randomScene(maxShapes=arguments.maxShapes, minShapes=arguments.maxShapes), arguments.timeout,
+                export=f"figures/tetris_{arguments.maxShapes}_shapes.png")
+  
+
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description = "")
     parser.add_argument("mode", choices=["train","test","demo"])
-    parser.add_argument("--checkpoint", default="checkpoints/CSG.pickle")
-    parser.add_argument("--maxShapes", default=2,
+    parser.add_argument("--checkpoint", default="checkpoints/tetris.pickle")
+    parser.add_argument("--maxShapes", default=4,
                             type=int)
     parser.add_argument("--trainTime", default=None, type=float,
                         help="Time in hours to train the network")
@@ -374,13 +412,10 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
 
     if arguments.mode == "demo":
-        for n in range(100):
-            randomScene(export=f"/tmp/CAD_{n}.png",maxShapes=arguments.maxShapes)
+        for n in range(20):
+            randomScene(export=f"tmp/tetris_{n}.png",maxShapes=arguments.maxShapes)
         import sys
         sys.exit(0)
-        
-            
-
     if arguments.mode == "train":
         m = ProgramPointerNetwork(ObjectEncoder(), SpecEncoder(), tDSL,
                                   oneParent=arguments.oneParent,
@@ -395,4 +430,4 @@ if __name__ == "__main__":
             m = pickle.load(handle)
         testCSG(m,
                 lambda: randomScene(maxShapes=arguments.maxShapes, minShapes=arguments.maxShapes), arguments.timeout,
-                export=f"figures/CAD_{arguments.maxShapes}_shapes.png")
+                export=f"figures/tetris_{arguments.maxShapes}_shapes.png")
