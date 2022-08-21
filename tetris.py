@@ -396,7 +396,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "")
     parser.add_argument("mode", choices=["train","test","demo"])
     parser.add_argument("--checkpoint", default="checkpoints/tetris.pickle")
-    parser.add_argument("--maxShapes", default=4,
+    parser.add_argument("--maxShapes", default=5,
                             type=int)
     parser.add_argument("--trainTime", default=None, type=float,
                         help="Time in hours to train the network")
