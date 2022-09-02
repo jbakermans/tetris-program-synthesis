@@ -49,8 +49,10 @@ class Tetris(Program):
         return self._rendering
 
     def IoU(self, other):
-        # Calculate 'area under curve' between self and other object
+        # Calculate 'Intersection over Union' between self and other object
         if isinstance(other, Tetris): other = other.execute()
+        # If one of the shapes can't be rendered: return 0 IoU
+        if other is None or self.execute() is None: return 0
         # Pad other by own size so they can be convolved
         other = np.pad(other,[[other.shape[0], other.shape[0]],
                               [other.shape[1], other.shape[1]]])
@@ -71,39 +73,46 @@ class Tetris(Program):
 # The type of CSG's
 tTetris = BaseType(Tetris)
 
-class Primitive(Tetris):
-    token = 's' # Will be replaced by primitive nr on init
-    type = arrow(tTetris, tTetris)
-    
-    def __init__(self, index=0):
-        super().__init__()        
-        self.shape = dsl.PRIMITIVES[index]
-        self.index = index
-        self.token = str(index)
+def makePrimitive(index):
+    # Each primitive is identical, except for its token, which specifies the shape
+    # This function return a primitive class with the token set appropriately
+    class Primitive(Tetris):
+        token = str(index)
+        type = tTetris
         
-    def toTrace(self): return [self]
-
-    def __str__(self):
-        return 's' + self.token
-
-    def children(self): return []
-
-    def __eq__(self, o):
-        return isinstance(o, Primitive) and o.index == self.index
-
-    def __hash__(self):
-        return hash((self.token))
+        def __init__(self):
+            super().__init__()        
+            self.shape = dsl.PRIMITIVES[index]
+            self.index = index
+            
+        def toTrace(self): return [self]
     
-    def __contains__(self, p):
-        # Use contains to find if queried program occurs anywhere in full program
-        return p == self
+        def __str__(self):
+            return 's' + self.token
+    
+        def children(self): return []
+    
+        def __eq__(self, o):
+            return isinstance(o, Primitive) and o.index == self.index
+    
+        def __hash__(self):
+            return hash((self.token))
+        
+        def __contains__(self, p):
+            # Use contains to find if queried program occurs anywhere in full program
+            return p == self
+    
+        def serialize(self):
+            return (self.token)
+        
+        def render(self):
+            return self.shape
+    # Return the primitive
+    return Primitive
+    
+# Make all the primitives
+Primitives = [makePrimitive(i) for i in range(9)]
 
-    def serialize(self):
-        return (self.token)
-    
-    def render(self):
-        return self.shape
-    
 class Hor(Tetris):
     token = 'h'
     type = arrow(integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)), 
@@ -123,7 +132,7 @@ class Hor(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return (self.token,list(self.elements)[0],list(self.elements)[1], self.shift)
+        return (self.token, self.shift, list(self.elements)[0], list(self.elements)[1])
 
     def __eq__(self, o):
         return isinstance(o, Hor) and tuple(o.elements) == tuple(self.elements) \
@@ -164,7 +173,7 @@ class Vert(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return (self.token,list(self.elements)[0],list(self.elements)[1], self.shift)
+        return (self.token, self.shift, list(self.elements)[0], list(self.elements)[1])
 
     def __eq__(self, o):
         return isinstance(o, Vert) and tuple(o.elements) == tuple(self.elements) \
@@ -184,12 +193,15 @@ class Vert(Tetris):
         return dsl.vert(self.elements[0].render(), 
                         self.elements[1].render(), 
                         shift=self.shift)    
-    
-tDSL = DSL([Hor, Vert, Primitive],
+
+# To specify a DSL, I will need to create a list of operators, one for each primitives
+tDSL = DSL([Hor, Vert] + Primitives,
           lexicon=Tetris.lexicon)
 
 """Small utility function"""
 def padToFit(dat, val=0, w=RESOLUTION, h=RESOLUTION, center=True):
+    # If input is None: output is None as well
+    if dat is None: return dat
     # Pad input array with zeros to achieve input shape
     h_add = max([h - dat.shape[0], 0])
     h_add_0 = int(h_add / 2) if center else h_add
@@ -229,14 +241,14 @@ def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=
     # Choose number of shapes to include
     desiredShapes = np.random.randint(minShapes, maxShapes + 1)
     # Generate initial shape
-    s=Primitive(np.random.randint(len(dsl.PRIMITIVES)))
+    s=Primitives[np.random.randint(len(dsl.PRIMITIVES))]()
     for _ in range(desiredShapes - 1):
         # Sample new primitive and add to list of arguments
-        o = [s, Primitive(np.random.randint(len(dsl.PRIMITIVES)))]
+        o = [s, Primitives[np.random.randint(len(dsl.PRIMITIVES))]()]
         # Resample until new primitive until it's unique, if required
         if no_repeat:
             while o[1] in o[0]:
-                o[1] = Primitive(np.random.randint(len(dsl.PRIMITIVES)))
+                o[1] = Primitives[np.random.randint(len(dsl.PRIMITIVES))]()
         # Shuffle objects randomly, so which goes where is random
         np.random.shuffle(o)
         # Get shapes of rendered version of both, because that will constrain shift
@@ -309,6 +321,7 @@ def testCSG(m, getProgram, timeout, export):
         print(ProgramGraph.fromRoot(spec, oneParent=oneParent).prettyPrint())
         print()
         for n, solver in enumerate(solvers):
+            import pdb; pdb.set_trace()
             testSequence = solver.infer(spec.execute(), loss, timeout)
             testResults[n].append(testSequence)
             for result in testSequence:
@@ -353,7 +366,7 @@ def debug(mode='demo'):
     import argparse
     parser = argparse.ArgumentParser(description = "")
     parser.add_argument("--checkpoint", default="checkpoints/tetris_test.pickle")
-    parser.add_argument("--maxShapes", default=4,
+    parser.add_argument("--maxShapes", default=5,
                             type=int)
     parser.add_argument("--trainTime", default=None, type=float,
                         help="Time in hours to train the network")
