@@ -52,7 +52,12 @@ class Tetris(Program):
         # Calculate 'Intersection over Union' between self and other object
         if isinstance(other, Tetris): other = other.execute()
         # If one of the shapes can't be rendered: return 0 IoU
-        if other is None or self.execute() is None: return 0
+        if other is None or self.execute() is None: 
+            return 0
+        else:
+            # If any of the two shapes is just zeros everywhere: return 0 IoU
+            if np.all(other == 0) or np.all(self.execute()) == 0:
+                return 0
         # Pad other by own size so they can be convolved
         other = np.pad(other,[[other.shape[0], other.shape[0]],
                               [other.shape[1], other.shape[1]]])
@@ -73,50 +78,68 @@ class Tetris(Program):
 # The type of CSG's
 tTetris = BaseType(Tetris)
 
-def makePrimitive(index):
-    # Each primitive is identical, except for its token, which specifies the shape
-    # This function return a primitive class with the token set appropriately
-    class Primitive(Tetris):
-        token = str(index)
-        type = tTetris
+class Primitive(Tetris):
+    # Token needs to be set in shape-specific class
+    token=None
+    type = tTetris
+    
+    def __init__(self):
+        super().__init__()
+        self.index = int(self.token)
+        self.shape = dsl.PRIMITIVES[self.index]
         
-        def __init__(self):
-            super().__init__()        
-            self.shape = dsl.PRIMITIVES[index]
-            self.index = index
-            
-        def toTrace(self): return [self]
+    def toTrace(self): return [self]
+
+    def __str__(self):
+        return 's' + self.token
+
+    def children(self): return []
+
+    def __eq__(self, o):
+        return isinstance(o, Primitive) and o.index == self.index
+
+    def __hash__(self):
+        return hash((self.token))
     
-        def __str__(self):
-            return 's' + self.token
+    def __contains__(self, p):
+        # Use contains to find if queried program occurs anywhere in full program
+        return p == self
+
+    def serialize(self):
+        return (self.token)
     
-        def children(self): return []
+    def render(self):
+        return self.shape
     
-        def __eq__(self, o):
-            return isinstance(o, Primitive) and o.index == self.index
-    
-        def __hash__(self):
-            return hash((self.token))
-        
-        def __contains__(self, p):
-            # Use contains to find if queried program occurs anywhere in full program
-            return p == self
-    
-        def serialize(self):
-            return (self.token)
-        
-        def render(self):
-            return self.shape
-    # Return the primitive
-    return Primitive
-    
-# Make all the primitives
-Primitives = [makePrimitive(i) for i in range(9)]
+# Make all the primitives. Would be nice to do this in a function, then loop
+# (class factory pattern) but then I can't pickle, because the class is local
+class S0(Primitive):
+    token = '0'
+class S1(Primitive):
+    token = '1'
+class S2(Primitive):
+    token = '2'
+class S3(Primitive):
+    token = '3'
+class S4(Primitive):
+    token = '4'
+class S5(Primitive):
+    token = '5'
+class S6(Primitive):
+    token = '6'
+class S7(Primitive):
+    token = '7'
+class S8(Primitive):
+    token = '8'
+
+# Make a list of all primitive classes for easy access
+Primitives = [S0, S1, S2, S3, S4, S5, S6, S7, S8]
 
 class Hor(Tetris):
     token = 'h'
-    type = arrow(integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)), 
-                 tTetris, tTetris, tTetris)
+    type = arrow(tTetris, tTetris, 
+                 integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)),
+                 tTetris)
     
     def __init__(self, a, b, shift=0):
         super(Hor, self).__init__()
@@ -132,7 +155,7 @@ class Hor(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return (self.token, self.shift, list(self.elements)[0], list(self.elements)[1])
+        return (self.token, list(self.elements)[0], list(self.elements)[1], self.shift)
 
     def __eq__(self, o):
         return isinstance(o, Hor) and tuple(o.elements) == tuple(self.elements) \
@@ -149,15 +172,17 @@ class Hor(Tetris):
         return hash((self.token, tuple(self.elements)))
     
     def render(self):
-        return dsl.hor(self.elements[0].render(), 
-                       self.elements[1].render(), 
-                       shift=self.shift)
-    
+        return None if any(s() in self.elements[0] and s() in self.elements[1] 
+                           for s in Primitives) \
+            else dsl.hor(self.elements[0].render(), 
+                         self.elements[1].render(), 
+                         shift=self.shift)
     
 class Vert(Tetris):
     token = 'v'
-    type = arrow(integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)), 
-                 tTetris, tTetris, tTetris)
+    type = arrow(tTetris, tTetris, 
+                 integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)),
+                 tTetris)
     
     def __init__(self, a, b, shift=0):
         super(Vert, self).__init__()
@@ -173,7 +198,7 @@ class Vert(Tetris):
     def children(self): return self.elements
 
     def serialize(self):
-        return (self.token, self.shift, list(self.elements)[0], list(self.elements)[1])
+        return (self.token, list(self.elements)[0], list(self.elements)[1], self.shift)
 
     def __eq__(self, o):
         return isinstance(o, Vert) and tuple(o.elements) == tuple(self.elements) \
@@ -190,9 +215,11 @@ class Vert(Tetris):
         return hash((self.token, tuple(self.elements)))
     
     def render(self):
-        return dsl.vert(self.elements[0].render(), 
-                        self.elements[1].render(), 
-                        shift=self.shift)    
+        return None if any(s() in self.elements[0] and s() in self.elements[1] 
+                           for s in Primitives) \
+            else dsl.vert(self.elements[0].render(), 
+                          self.elements[1].render(), 
+                          shift=self.shift)
 
 # To specify a DSL, I will need to create a list of operators, one for each primitives
 tDSL = DSL([Hor, Vert] + Primitives,
@@ -200,8 +227,8 @@ tDSL = DSL([Hor, Vert] + Primitives,
 
 """Small utility function"""
 def padToFit(dat, val=0, w=RESOLUTION, h=RESOLUTION, center=True):
-    # If input is None: output is None as well
-    if dat is None: return dat
+    # If input is None: output is empty canvas
+    if dat is None: return np.zeros((h, w))
     # Pad input array with zeros to achieve input shape
     h_add = max([h - dat.shape[0], 0])
     h_add_0 = int(h_add / 2) if center else h_add
@@ -237,7 +264,7 @@ class SpecEncoder(CNN):
 
 
 """Training"""
-def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=True):
+def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None):
     # Choose number of shapes to include
     desiredShapes = np.random.randint(minShapes, maxShapes + 1)
     # Generate initial shape
@@ -245,10 +272,9 @@ def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None, no_repeat=
     for _ in range(desiredShapes - 1):
         # Sample new primitive and add to list of arguments
         o = [s, Primitives[np.random.randint(len(dsl.PRIMITIVES))]()]
-        # Resample until new primitive until it's unique, if required
-        if no_repeat:
-            while o[1] in o[0]:
-                o[1] = Primitives[np.random.randint(len(dsl.PRIMITIVES))]()
+        # Resample until new primitive until it's unique
+        while o[1] in o[0]:
+            o[1] = Primitives[np.random.randint(len(dsl.PRIMITIVES))]()
         # Shuffle objects randomly, so which goes where is random
         np.random.shuffle(o)
         # Get shapes of rendered version of both, because that will constrain shift
@@ -321,7 +347,6 @@ def testCSG(m, getProgram, timeout, export):
         print(ProgramGraph.fromRoot(spec, oneParent=oneParent).prettyPrint())
         print()
         for n, solver in enumerate(solvers):
-            import pdb; pdb.set_trace()
             testSequence = solver.infer(spec.execute(), loss, timeout)
             testResults[n].append(testSequence)
             for result in testSequence:
