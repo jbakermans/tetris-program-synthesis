@@ -56,7 +56,7 @@ class Tetris(Program):
             return 0
         else:
             # If any of the two shapes is just zeros everywhere: return 0 IoU
-            if np.all(other == 0) or np.all(self.execute()) == 0:
+            if np.all(other == 0) or np.all(self.execute() == 0):
                 return 0
         # Pad other by own size so they can be convolved
         other = np.pad(other,[[other.shape[0], other.shape[0]],
