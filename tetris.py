@@ -33,7 +33,7 @@ import torch.nn as nn
 class Tetris(Program):
     lexicon = ['h', 'v'] \
         + [str(i) for i in range(9)] \
-            + [i - int(RESOLUTION / 2) for i in range(RESOLUTION)]
+            + [i - int(RESOLUTION / 2) for i in range(RESOLUTION + 1)]
 
     def __init__(self):
         self._rendering = None
@@ -138,7 +138,7 @@ Primitives = [S0, S1, S2, S3, S4, S5, S6, S7, S8]
 class Hor(Tetris):
     token = 'h'
     type = arrow(tTetris, tTetris, 
-                 integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)),
+                 integer(-int(RESOLUTION / 2), RESOLUTION - int(RESOLUTION / 2)),
                  tTetris)
     
     def __init__(self, a, b, shift=0):
@@ -181,7 +181,7 @@ class Hor(Tetris):
 class Vert(Tetris):
     token = 'v'
     type = arrow(tTetris, tTetris, 
-                 integer(-int(RESOLUTION / 2), RESOLUTION - 1 - int(RESOLUTION / 2)),
+                 integer(-int(RESOLUTION / 2), RESOLUTION - int(RESOLUTION / 2)),
                  tTetris)
     
     def __init__(self, a, b, shift=0):
@@ -282,10 +282,14 @@ def randomScene(maxShapes=5, minShapes=1, verbose=False, export=None):
         # Randomly choosse to      
         if np.random.rand() > 0.5:
             # Horizontal concetanation, with random shift depending on heights
-            s = Hor(o[0], o[1], shift=np.random.randint(-d[1][0] + 1, d[0][0]))
+            s = Hor(o[0], o[1], shift=np.random.randint(
+                max(-d[1][0] + 1, -int(RESOLUTION / 2)), 
+                min(d[0][0], RESOLUTION - int(RESOLUTION / 2))))
         else:
             # Vertical concetanation, with random shift depending on widths
-            s = Vert(o[0], o[1], shift=np.random.randint(-d[1][1] + 1, d[0][1]))
+            s = Vert(o[0], o[1], shift=np.random.randint(
+                max(-d[1][1] + 1, -int(RESOLUTION / 2)),
+                min(d[0][1], RESOLUTION - int(RESOLUTION / 2))))
     if verbose:
         print(s)
         print(ProgramGraph.fromRoot(s, oneParent=True).prettyPrint())
